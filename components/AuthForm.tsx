@@ -21,11 +21,42 @@ import { signIn, signUp } from "@/lib/actions/auth.action";
 import FormField from "./FormField";
 
 const authFormSchema = (type: FormType) => {
-  return z.object({
-    name: type === "sign-up" ? z.string().min(3) : z.string().optional(),
-    email: z.string().email(),
-    password: z.string().min(3),
+  const baseSchema = z.object({
+    name:
+      type === "sign-up"
+        ? z
+            .string()
+            .min(1, "Name is required")
+            .min(3, "Name must be at least 3 characters")
+        : z.string().optional(),
+    email: z
+      .string()
+      .min(1, "Email is required")
+      .email("Please enter a valid email address"),
+    password:
+      type === "sign-up"
+        ? z
+            .string()
+            .min(8, "Weak password")
+            .regex(/[A-Z]/, "Weak password")
+            .regex(/[a-z]/, "Weak password")
+            .regex(/[0-9]/, "Weak password")
+            .regex(/[^A-Za-z0-9]/, "Weak password")
+        : z.string().min(1, "Password is required"),
   });
+
+  if (type === "sign-up") {
+    return baseSchema
+      .extend({
+        confirmPassword: z.string().min(1, "Please confirm your password"),
+      })
+      .refine((data) => data.password === data.confirmPassword, {
+        message: "Passwords do not match",
+        path: ["confirmPassword"],
+      });
+  }
+
+  return baseSchema;
 };
 
 const AuthForm = ({ type }: { type: FormType }) => {
@@ -38,6 +69,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
       name: "",
       email: "",
       password: "",
+      confirmPassword: "",
     },
   });
 
@@ -89,9 +121,25 @@ const AuthForm = ({ type }: { type: FormType }) => {
         toast.success("Signed in successfully.");
         router.push("/");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      toast.error(`There was an error: ${error}`);
+
+      if (error?.code === "auth/invalid-credential") {
+        toast.error("Invalid email or password.");
+        return;
+      }
+
+      if (error?.code === "auth/email-already-in-use") {
+        toast.error("This email is already in use. Please sign in.");
+        return;
+      }
+
+      if (error?.code === "auth/weak-password") {
+        toast.error("Weak password.");
+        return;
+      }
+
+      toast.error("Something went wrong. Please try again.");
     }
   };
 
@@ -137,6 +185,16 @@ const AuthForm = ({ type }: { type: FormType }) => {
               placeholder="Enter your password"
               type="password"
             />
+
+            {!isSignIn && (
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                label="Confirm Password"
+                placeholder="Re-enter your password"
+                type="password"
+              />
+            )}
 
             <Button className="btn" type="submit">
               {isSignIn ? "Sign In" : "Create an Account"}

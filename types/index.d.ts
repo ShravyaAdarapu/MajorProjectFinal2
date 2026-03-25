@@ -83,6 +83,14 @@ interface SignUpParams {
   password: string;
 }
 
+interface LeaderboardEntry {
+  userId: string;
+  name: string;
+  email: string;
+  highestScore: number;
+  achievedAt: string;
+}
+
 type FormType = "sign-in" | "sign-up";
 
 interface InterviewFormProps {

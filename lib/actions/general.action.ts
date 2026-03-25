@@ -123,3 +123,66 @@ export async function getInterviewsByUserId(
     ...doc.data(),
   })) as Interview[];
 }
+
+export async function getWeeklyLeaderboard(): Promise<LeaderboardEntry[]> {
+  const oneWeekAgoISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const feedbackSnapshot = await db
+    .collection("feedback")
+    .where("createdAt", ">=", oneWeekAgoISO)
+    .get();
+
+  if (feedbackSnapshot.empty) return [];
+
+  const bestByUser = new Map<
+    string,
+    { highestScore: number; achievedAt: string }
+  >();
+
+  feedbackSnapshot.docs.forEach((doc) => {
+    const data = doc.data() as Partial<Feedback>;
+    const userId = data.userId;
+    const totalScore = data.totalScore;
+    const createdAt = data.createdAt;
+
+    if (
+      typeof userId !== "string" ||
+      typeof totalScore !== "number" ||
+      typeof createdAt !== "string"
+    ) {
+      return;
+    }
+
+    const existing = bestByUser.get(userId);
+    if (
+      !existing ||
+      totalScore > existing.highestScore ||
+      (totalScore === existing.highestScore && createdAt > existing.achievedAt)
+    ) {
+      bestByUser.set(userId, {
+        highestScore: totalScore,
+        achievedAt: createdAt,
+      });
+    }
+  });
+
+  const leaderboardEntries = await Promise.all(
+    Array.from(bestByUser.entries()).map(async ([userId, scoreData]) => {
+      const userDoc = await db.collection("users").doc(userId).get();
+      const userData = (userDoc.data() ?? {}) as Partial<User>;
+
+      return {
+        userId,
+        name: userData.name ?? "Unknown User",
+        email: userData.email ?? "-",
+        highestScore: scoreData.highestScore,
+        achievedAt: scoreData.achievedAt,
+      };
+    })
+  );
+
+  return leaderboardEntries.sort((a, b) => {
+    if (b.highestScore !== a.highestScore) return b.highestScore - a.highestScore;
+    return b.achievedAt.localeCompare(a.achievedAt);
+  });
+}
