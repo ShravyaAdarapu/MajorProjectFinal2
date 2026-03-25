@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 
+import { roleBasedInterviews } from "@/constants";
 import {
   getFeedbackByInterviewId,
   getInterviewById,
@@ -15,7 +16,12 @@ const Feedback = async ({ params }: RouteParams) => {
   const user = await getCurrentUser();
 
   const interview = await getInterviewById(id);
-  if (!interview) redirect("/");
+  const seedInterview = !interview
+    ? roleBasedInterviews.find((i) => i.id === id) ?? null
+    : null;
+
+  const resolvedInterview = interview ?? seedInterview;
+  if (!resolvedInterview) redirect("/");
 
   const feedback = await getFeedbackByInterviewId({
     interviewId: id,
@@ -27,7 +33,7 @@ const Feedback = async ({ params }: RouteParams) => {
       <div className="flex flex-row justify-center">
         <h1 className="text-4xl font-semibold">
           Feedback on the Interview -{" "}
-          <span className="capitalize">{interview.role}</span> Interview
+          <span className="capitalize">{resolvedInterview.role}</span> Interview
         </h1>
       </div>
 

@@ -2,12 +2,10 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
-  getFeedbackByInterviewId,
-  getInterviewsByUserId,
+  getUserDashboardMetrics,
   getWeeklyLeaderboard,
 } from "@/lib/actions/general.action";
 
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const getRankBadge = (rank: number) => {
   if (rank === 1) return "🥇";
   if (rank === 2) return "🥈";
@@ -19,45 +17,14 @@ const DashboardPage = async () => {
   const user = await getCurrentUser();
   if (!user?.id) redirect("/sign-in");
 
-  const interviews = (await getInterviewsByUserId(user.id)) ?? [];
   const weeklyLeaderboard = await getWeeklyLeaderboard();
-  const now = Date.now();
-  const interviewsAsc = [...interviews].sort(
-    (a, b) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
-
-  const feedbackEntries = await Promise.all(
-    interviewsAsc.map(async (interview, index) => {
-      const feedback = await getFeedbackByInterviewId({
-        interviewId: interview.id,
-        userId: user.id,
-      });
-
-      return {
-        index: index + 1,
-        role: interview.role,
-        score: feedback?.totalScore ?? null,
-      };
-    })
-  );
-
-  const scoreSeries = feedbackEntries.filter(
-    (entry): entry is { index: number; role: string; score: number } =>
-      typeof entry.score === "number"
-  );
-
-  const interviewsInLastWeek = interviews.filter((interview) => {
-    return now - new Date(interview.createdAt).getTime() <= 7 * DAY_IN_MS;
-  }).length;
-
-  const interviewsInLastMonth = interviews.filter((interview) => {
-    return now - new Date(interview.createdAt).getTime() <= 30 * DAY_IN_MS;
-  }).length;
-
-  const interviewsInLastYear = interviews.filter((interview) => {
-    return now - new Date(interview.createdAt).getTime() <= 365 * DAY_IN_MS;
-  }).length;
+  const {
+    totalCompletedInterviews,
+    completedInterviewsLastWeek,
+    completedInterviewsLastMonth,
+    completedInterviewsLastYear,
+    scoreSeries,
+  } = await getUserDashboardMetrics(user.id);
 
   const chartWidth = 820;
   const chartHeight = 300;
@@ -106,7 +73,7 @@ const DashboardPage = async () => {
             <div className="rounded-xl bg-dark-200 p-4 border border-light-800">
               <p className="text-sm text-light-100">Total Interviews</p>
               <p className="mt-1 text-primary-100 font-semibold">
-                {interviews.length}
+                {totalCompletedInterviews}
               </p>
             </div>
           </div>
@@ -117,19 +84,25 @@ const DashboardPage = async () => {
         <div className="card-border w-full">
           <div className="dark-gradient rounded-2xl p-6">
             <p className="text-light-100 text-sm">Interviews in last week</p>
-            <h2 className="text-primary-100 mt-2">{interviewsInLastWeek}</h2>
+              <h2 className="text-primary-100 mt-2">
+                {completedInterviewsLastWeek}
+              </h2>
           </div>
         </div>
         <div className="card-border w-full">
           <div className="dark-gradient rounded-2xl p-6">
             <p className="text-light-100 text-sm">Interviews in last month</p>
-            <h2 className="text-primary-100 mt-2">{interviewsInLastMonth}</h2>
+              <h2 className="text-primary-100 mt-2">
+                {completedInterviewsLastMonth}
+              </h2>
           </div>
         </div>
         <div className="card-border w-full">
           <div className="dark-gradient rounded-2xl p-6">
             <p className="text-light-100 text-sm">Interviews in last year</p>
-            <h2 className="text-primary-100 mt-2">{interviewsInLastYear}</h2>
+              <h2 className="text-primary-100 mt-2">
+                {completedInterviewsLastYear}
+              </h2>
           </div>
         </div>
       </div>

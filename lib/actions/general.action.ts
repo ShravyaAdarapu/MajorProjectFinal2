@@ -4,7 +4,7 @@ import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 
 import { db } from "@/firebase/admin";
-import { feedbackSchema } from "@/constants";
+import { feedbackSchema, roleBasedInterviews } from "@/constants";
 
 export async function createFeedback(params: CreateFeedbackParams) {
   const { interviewId, userId, transcript, feedbackId } = params;
@@ -69,7 +69,12 @@ export async function createFeedback(params: CreateFeedbackParams) {
 export async function getInterviewById(id: string): Promise<Interview | null> {
   const interview = await db.collection("interviews").doc(id).get();
 
-  return interview.data() as Interview | null;
+  if (!interview.exists) return null;
+
+  return {
+    id: interview.id,
+    ...(interview.data() as Omit<Interview, "id">),
+  } as Interview;
 }
 
 export async function getFeedbackByInterviewId(
@@ -122,6 +127,51 @@ export async function getInterviewsByUserId(
     id: doc.id,
     ...doc.data(),
   })) as Interview[];
+}
+
+// Returns only interviews the user has completed (i.e. there exists feedback for the user + interview).
+export async function getCompletedInterviewsByUserId(
+  userId: string
+): Promise<Interview[]> {
+  const feedbackSnapshot = await db
+    .collection("feedback")
+    .where("userId", "==", userId)
+    .get();
+
+  if (feedbackSnapshot.empty) return [];
+
+  // Note: we intentionally do NOT use Firestore `.orderBy("createdAt")` here.
+  // `where("userId", "==", ...) + orderBy("createdAt")` requires a composite index.
+  // Instead we sort in memory.
+  const uniqueInterviewIds: string[] = [];
+  const seen = new Set<string>();
+
+  const feedbackDocs = feedbackSnapshot.docs
+    .map((doc) => ({ doc, data: doc.data() as Partial<Feedback> }))
+    .filter(
+      ({ data }) =>
+        typeof data.interviewId === "string" && typeof data.createdAt === "string"
+    )
+    .sort((a, b) => (b.data.createdAt as string).localeCompare(a.data.createdAt as string));
+
+  feedbackDocs.forEach(({ data }) => {
+    const interviewId = data.interviewId;
+    if (typeof interviewId !== "string") return;
+    if (seen.has(interviewId)) return;
+    seen.add(interviewId);
+    uniqueInterviewIds.push(interviewId);
+  });
+
+  const interviews = await Promise.all(
+    uniqueInterviewIds.map(async (interviewId) => {
+      const interview = await getInterviewById(interviewId);
+      if (interview) return interview;
+      // Seed interviews aren't stored in Firestore; fall back to the in-app catalog.
+      return roleBasedInterviews.find((i) => i.id === interviewId) ?? null;
+    })
+  );
+
+  return interviews.filter((i): i is Interview => i !== null);
 }
 
 export async function getWeeklyLeaderboard(): Promise<LeaderboardEntry[]> {
@@ -185,4 +235,88 @@ export async function getWeeklyLeaderboard(): Promise<LeaderboardEntry[]> {
     if (b.highestScore !== a.highestScore) return b.highestScore - a.highestScore;
     return b.achievedAt.localeCompare(a.achievedAt);
   });
+}
+
+// Dashboard metrics for a single user.
+// IMPORTANT: these metrics are computed from `feedback` (completed/scored interviews),
+// not from the `interviews` collection.
+export async function getUserDashboardMetrics(userId: string): Promise<{
+  totalCompletedInterviews: number;
+  completedInterviewsLastWeek: number;
+  completedInterviewsLastMonth: number;
+  completedInterviewsLastYear: number;
+  scoreSeries: Array<{ index: number; role: string; score: number }>;
+}> {
+  const DAY_IN_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const feedbackSnapshot = await db
+    .collection("feedback")
+    .where("userId", "==", userId)
+    .get();
+
+  if (feedbackSnapshot.empty) {
+    return {
+      totalCompletedInterviews: 0,
+      completedInterviewsLastWeek: 0,
+      completedInterviewsLastMonth: 0,
+      completedInterviewsLastYear: 0,
+      scoreSeries: [],
+    };
+  }
+
+  const feedbacks = feedbackSnapshot.docs
+    .map((doc) => doc.data() as Partial<Feedback>)
+    .filter((data): data is Required<Pick<Feedback, "interviewId" | "createdAt" | "totalScore">> => {
+      return (
+        typeof data.interviewId === "string" &&
+        typeof data.createdAt === "string" &&
+        typeof data.totalScore === "number"
+      );
+    });
+
+  // Sort by completion time so the graph matches the timeline of scored attempts.
+  feedbacks.sort(
+    (a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  const completedInterviewsLastWeek = feedbacks.filter((fb) => {
+    return now - new Date(fb.createdAt).getTime() <= 7 * DAY_IN_MS;
+  }).length;
+
+  const completedInterviewsLastMonth = feedbacks.filter((fb) => {
+    return now - new Date(fb.createdAt).getTime() <= 30 * DAY_IN_MS;
+  }).length;
+
+  const completedInterviewsLastYear = feedbacks.filter((fb) => {
+    return now - new Date(fb.createdAt).getTime() <= 365 * DAY_IN_MS;
+  }).length;
+
+  const interviewIds = Array.from(new Set(feedbacks.map((fb) => fb.interviewId)));
+  const interviewMap = new Map<string, Interview>();
+
+  await Promise.all(
+    interviewIds.map(async (interviewId) => {
+      const interview = await getInterviewById(interviewId);
+      if (interview) interviewMap.set(interviewId, interview);
+    })
+  );
+
+  const scoreSeries = feedbacks.map((fb, i) => {
+    const interview = interviewMap.get(fb.interviewId);
+    return {
+      index: i + 1,
+      role: interview?.role ?? "Unknown",
+      score: fb.totalScore,
+    };
+  });
+
+  return {
+    totalCompletedInterviews: scoreSeries.length,
+    completedInterviewsLastWeek,
+    completedInterviewsLastMonth,
+    completedInterviewsLastYear,
+    scoreSeries,
+  };
 }
