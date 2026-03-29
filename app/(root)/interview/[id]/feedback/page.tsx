@@ -9,6 +9,7 @@ import {
   getInterviewById,
 } from "@/lib/actions/general.action";
 import { Button } from "@/components/ui/button";
+import { FeedbackPrintBar } from "@/components/FeedbackPrintBar";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 
 const Feedback = async ({ params }: RouteParams) => {
@@ -98,25 +99,33 @@ const Feedback = async ({ params }: RouteParams) => {
         </ul>
       </div>
 
-      <div className="buttons">
-        <Button className="btn-secondary flex-1">
-          <Link href="/" className="flex w-full justify-center">
-            <p className="text-sm font-semibold text-primary-200 text-center">
-              Back to dashboard
-            </p>
-          </Link>
-        </Button>
+      <div className="flex w-full flex-col gap-2 print:hidden">
+        <p className="text-center text-sm text-light-100">
+          Save this feedback: use{" "}
+          <span className="font-medium text-primary-200">Print / Save as PDF</span>{" "}
+          below, then pick &quot;Save as PDF&quot; in the print dialog.
+        </p>
+        <div className="buttons">
+          <FeedbackPrintBar variant="compact" />
+          <Button className="btn-secondary flex-1">
+            <Link href="/" className="flex w-full justify-center">
+              <p className="text-sm font-semibold text-primary-200 text-center">
+                Back to dashboard
+              </p>
+            </Link>
+          </Button>
 
-        <Button className="btn-primary flex-1">
-          <Link
-            href={`/interview/${id}`}
-            className="flex w-full justify-center"
-          >
-            <p className="text-sm font-semibold text-black text-center">
-              Retake Interview
-            </p>
-          </Link>
-        </Button>
+          <Button className="btn-primary flex-1">
+            <Link
+              href={`/interview/${id}`}
+              className="flex w-full justify-center"
+            >
+              <p className="text-sm font-semibold text-black text-center">
+                Retake Interview
+              </p>
+            </Link>
+          </Button>
+        </div>
       </div>
     </section>
   );

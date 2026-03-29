@@ -40,6 +40,13 @@ const Layout = async ({ children }: { children: ReactNode }) => {
               Dashboard
             </Link>
 
+            <Link
+              href="/resources"
+              className="block w-full rounded-lg px-3 py-2 text-sm text-primary-100 hover:bg-dark-200"
+            >
+              Resources
+            </Link>
+
             <form action={handleSignOut}>
               <button
                 type="submit"

@@ -332,3 +332,53 @@
     transform: translateY(0);
   }
 }
+
+@page {
+  margin: 1.25cm;
+}
+
+@media print {
+  html {
+    background: #fff;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  .root-layout > nav {
+    display: none !important;
+  }
+
+  .root-layout {
+    margin-top: 0;
+    margin-bottom: 0;
+    max-width: none;
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+  }
+
+  .section-feedback {
+    max-width: none;
+    color: #0a0a0a;
+  }
+
+  .section-feedback h1,
+  .section-feedback h2,
+  .section-feedback h3,
+  .section-feedback p,
+  .section-feedback li,
+  .section-feedback span {
+    color: #0a0a0a !important;
+  }
+
+  .section-feedback hr {
+    border-color: #ccc;
+  }
+
+  a {
+    color: #0a0a0a !important;
+    text-decoration: none;
+  }
+}
